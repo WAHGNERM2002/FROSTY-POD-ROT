@@ -1,6 +1,6 @@
 ---
-title: ""
-author: ""
+title: "Efficacy of a biofungicide based on Trichoderma afroharzianum CP 24-6 against cacao frosty pod rot under different doses and application timings"
+author: "Wagner Meza-Maicelo1,2, Enistein R. Reyna-Rivera1, Melissa I. Loja-Torres1, Santos T. Leiva-Espinoza1"
 format:
   html:
     toc: true
@@ -53,17 +53,521 @@ Schielzeth, H., Dingemanse, N. J., Nakagawa, S., Westneat, D. F., Allegue, H., T
 
 # Research Objective
 
-1. 
-1.
+The aim of this study was to evaluate the biocontrol potential of two doses of Trichoderma afroharzianum CP 24-6 against artificial infection by M. roreri in cacao fruits at different developmental stages
 
-## RO 1
+## External severity
+```{r}
+# ====================================
+# 1. CARGA DE LIBRERÍAS
+# ====================================
+# =============================================================================
+# LIBRERÍAS NECESARIAS PARA ANOVA DE DOS VÍAS COMPLETO
+# =============================================================================
+# Librerías básicas
+library(stats)      # Funciones básicas de estadística (viene con R base)
+library(car)        # Para pruebas de homogeneidad de varianzas (Levene)
+library(nortest)    # Para pruebas de normalidad adicionales
+library(openxlsx)   # Para importar datos desde Excel
+
+# Librerías para manipulación de datos y resultados
+library(dplyr)      # Manipulación de datos
+library(car)        # Para ANOVA tipo II/III (ya incluida arriba)
+library(emmeans)    # Para comparaciones múltiples (medias marginales)
+library(broom)      # Para convertir resultados a formato tidy
+
+# Librerías para análisis post-hoc
+library(agricolae)  # Pruebas post-hoc (Tukey, Duncan, LSD, etc.)
+library(multcomp)   # Comparaciones múltiples
+
+# Librerías para gráficos
+library(ggplot2)    # Gráficos elegantes
+library(ggpubr)     # Gráficos estadísticos con ggplot2
+library(gridExtra)  # Organizar múltiples gráficos
+
+# Librerías para reportes y tablas
+library(broom)      # (repetido) Resultados tidy
+library(knitr)      # Tablas elegantes
+library(dplyr)      # (repetido) Manipulación de datos
+```
 
 ```{r}
+# ====================================
+# 2. IMPORTACIÓN Y EXPLORACION DE DATOS
+# ====================================
+getwd() # Verificar escritorio
+
+# Importar desde archivo Excel
+DatAov2 <- read.xlsx("C:/Users/USUARIO/Documents/W1/R_HENRY/DATA_CAMPO.xlsx", sheet = "data_none_repeated")
+
+# Ver estructura detallada
+str(DatAov2)
+```
+
+```{r}
+# ====================================
+# 3. PREPARACION Y AJUSTE DEL MODELO
+# ====================================
+# Convert categorical variables to factors for incidence
+DatAov2 <- DatAov2 |> 
+  mutate(ID = factor(ID),
+         cc = factor(cc),
+         ed_inf = factor(ed_inf),
+         bq = factor(bq))
+
+# Ver estructura detallada
+str(DatAov2)
+
+# Ajuste del modelo estadistico (ANOVA DE DOS VIAS)
+modeloAov2 <- aov(se ~ cc * 
+                    ed_inf + bq, data = DatAov2)
+summary(modeloAov2)
+```
+
+```{r}
+# =======================================
+# 4. VERIFICACION DE SUPUESTOS DEL MODELO
+# =======================================
+# Verificación gráfica de supuestos
+par(modeloAov2 = c(2, 2))
+plot(modeloAov2)
+
+# Gráfico Q-Q para residuos usando car::qqPlot
+qqPlot(residuals(modeloAov2), 
+       main = "Q-Q Plot de Residuos del ANOVA", 
+       xlab = "Cuantiles teóricos", 
+       ylab = "Cuantiles observados (Residuos)",
+       col = "blue")
+
+## A) NORMALIDAD DE RESIDUOS
+# Prueba de Shapiro-Wilk para residuos
+shapiro.test(residuals(modeloAov2))
+
+# Prueba de Anderson-Darling
+ad.test(residuals(modeloAov2))
+
+# B) HOMOGENEIDAD DE VARIANZAS PARA GENOTIPO
+# Prueba de Bartlett (más sensible a no normalidad)
+bartlett.test(se ~ cc, data = DatAov2)
+
+# B) HOMOGENEIDAD DE VARIANZAS PARA TRATAMIENTO
+# Prueba de Bartlett (más sensible a no normalidad)
+bartlett.test(se ~ ed_inf, data = DatAov2)
+
+#Homogeneidad de varianzas
+leveneTest(se ~ cc, data = DatAov2)
+```
+
+```{r}
+# =======================================
+# 5. PRUEBAS POST HOC COMPLETAS
+# =======================================
+# =======================================
+# 5.1 POST HOC PARA FACTOR GENOTIPO
+# =======================================
+# Prueba de Tukey HSD para Genotipo
+HSD_cc <- HSD.test(modeloAov2, "cc", group = TRUE)
+print(HSD_cc$groups)
+
+# =======================================
+# 5.2 POST HOC PARA FACTOR TRATAMIENTO
+# =======================================
+# Prueba de Tukey HSD para Tratamiento
+HSD_ed_inf <- HSD.test(modeloAov2, "ed_inf", group = TRUE)
+print(HSD_ed_inf$groups)
+
+# =======================================
+# 5.3 POST HOC PARA LA INTERACCIÓN
+# =======================================
+# Prueba de Tukey HSD para la interacción
+HSD_Interaccion <- HSD.test(modeloAov2, c("cc", "ed_inf"), group = TRUE)
+print(HSD_Interaccion$groups)
+```
+```{r}
+#=====================================================
+# código adicional para gráfico (FUNCIONAL)
+#=====================================================
+
+# 1. Hacer prueba de Tukey HSD para la interacción
+HSD_Interaccion <- HSD.test(modeloAov2, c("cc", "ed_inf"), group = TRUE)
+print(HSD_Interaccion$groups)
+
+# 2. Crear resumen de medias por combinación
+medias_interaccion <- DatAov2 %>%
+  group_by(cc, ed_inf) %>%
+  summarise(
+    Media = mean(se, na.rm = TRUE),
+    Error_Std = sd(se, na.rm = TRUE),
+    n = n(),
+    Error_Estandar = Error_Std / sqrt(n),
+    .groups = 'drop'
+  ) %>%
+  mutate(combinacion = paste(cc, ed_inf, sep = ":"))
+
+# 3. Preparar letras del post hoc
+letras <- as.data.frame(HSD_Interaccion$groups)
+letras$combinacion <- rownames(letras)
+colnames(letras)[which(names(letras) == "groups")] <- "letra"
+letras <- letras[, c("combinacion", "letra")]
+
+# 4. Unir letras con resumen de medias
+medias_interaccion <- left_join(medias_interaccion, letras, by = "combinacion")
+
+# 5. Hacer gráfico de barras con letras
+# Definir un solo position_dodge
+# Definir posición común
+dodge <- position_dodge(width = 0.7)
+
+grafico_barras <- ggplot(medias_interaccion, aes(x = cc, y = Media, fill = ed_inf)) +
+  geom_bar(stat = "identity", position = dodge, width = 0.6, color = "black") +
+  geom_errorbar(aes(ymin = Media - Error_Estandar, ymax = Media + Error_Estandar),
+                position = dodge, width = 0.2) +
+  geom_text(aes(label = letra, y = Media + Error_Estandar + 0.07),
+            position = dodge, vjust = 0, size = 3.5) +
+  labs(
+    x = "Doses (conidia/mL)", 
+    y = "External severity grades", 
+    fill = "Cacao pod age (days)"
+  ) +
+  theme_classic() +
+  scale_fill_manual(values = c("20" = "#a6cee3", "40" = "#b2df8a", "60" = "#fdbf6f")) +  # Colores específicos
+  theme(
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 8)
+  )
+
+# Mostrar gráfico
+print(grafico_barras)
+
+
+# 6. Mostrar gráfico
+print(grafico_barras)
+# Guardar el gráfico
+ggsave("C:/Users/USUARIO/Desktop/TESIS/TESIS SUSTENTADA/ARTICLE_LEIVA/FIGURES_ARTICLE/Figure_4a.png", 
+       grafico_barras, width = 6, height = 4.5, dpi = 300)
+
 
 ```
 
-## RO 2
+
+## Internal severity
+```{r}
+# ====================================
+# 2. IMPORTACIÓN Y EXPLORACION DE DATOS
+# ====================================
+getwd() # Verificar escritorio
+
+# Importar desde archivo Excel
+DatAov2 <- read.xlsx("C:/Users/USUARIO/Documents/W1/R_HENRY/DATA_CAMPO.xlsx", sheet = "data_none_repeated")
+
+# Ver estructura detallada
+str(DatAov2)
+```
 
 ```{r}
+# ====================================
+# 3. PREPARACION Y AJUSTE DEL MODELO
+# ====================================
+# Convert categorical variables to factors for incidence
+DatAov2 <- DatAov2 |> 
+  mutate(ID = factor(ID),
+         cc = factor(cc),
+         ed_inf = factor(ed_inf),
+         bq = factor(bq))
+
+# Ver estructura detallada
+str(DatAov2)
+
+# Ajuste del modelo estadistico (ANOVA DE DOS VIAS)
+modeloAov2 <- aov(si ~ cc * 
+                    ed_inf + bq, data = DatAov2)
+summary(modeloAov2)
+```
+
+```{r}
+# =======================================
+# 4. VERIFICACION DE SUPUESTOS DEL MODELO
+# =======================================
+# Verificación gráfica de supuestos
+par(modeloAov2 = c(2, 2))
+plot(modeloAov2)
+
+# Gráfico Q-Q para residuos usando car::qqPlot
+qqPlot(residuals(modeloAov2), 
+       main = "Q-Q Plot de Residuos del ANOVA", 
+       xlab = "Cuantiles teóricos", 
+       ylab = "Cuantiles observados (Residuos)",
+       col = "blue")
+
+## A) NORMALIDAD DE RESIDUOS
+# Prueba de Shapiro-Wilk para residuos
+shapiro.test(residuals(modeloAov2))
+
+# Prueba de Anderson-Darling
+ad.test(residuals(modeloAov2))
+
+# B) HOMOGENEIDAD DE VARIANZAS PARA GENOTIPO
+# Prueba de Bartlett (más sensible a no normalidad)
+bartlett.test(si ~ cc, data = DatAov2)
+
+# B) HOMOGENEIDAD DE VARIANZAS PARA TRATAMIENTO
+# Prueba de Bartlett (más sensible a no normalidad)
+bartlett.test(si ~ ed_inf, data = DatAov2)
+
+#Homogeneidad de varianzas
+leveneTest(si ~ cc, data = DatAov2)
+```
+
+```{r}
+# =======================================
+# 5. PRUEBAS POST HOC COMPLETAS
+# =======================================
+# =======================================
+# 5.1 POST HOC PARA FACTOR GENOTIPO
+# =======================================
+# Prueba de Tukey HSD para Genotipo
+HSD_cc <- HSD.test(modeloAov2, "cc", group = TRUE)
+print(HSD_cc$groups)
+
+# =======================================
+# 5.2 POST HOC PARA FACTOR TRATAMIENTO
+# =======================================
+# Prueba de Tukey HSD para Tratamiento
+HSD_ed_inf <- HSD.test(modeloAov2, "ed_inf", group = TRUE)
+print(HSD_ed_inf$groups)
+
+# =======================================
+# 5.3 POST HOC PARA LA INTERACCIÓN
+# =======================================
+# Prueba de Tukey HSD para la interacción
+HSD_Interaccion <- HSD.test(modeloAov2, c("cc", "ed_inf"), group = TRUE)
+print(HSD_Interaccion$groups)
+```
+```{r}
+#=====================================================
+# código adicional para gráfico (FUNCIONAL)
+#=====================================================
+
+# 1. Hacer prueba de Tukey HSD para la interacción
+HSD_Interaccion <- HSD.test(modeloAov2, c("cc", "ed_inf"), group = TRUE)
+print(HSD_Interaccion$groups)
+
+# 2. Crear resumen de medias por combinación
+medias_interaccion <- DatAov2 %>%
+  group_by(cc, ed_inf) %>%
+  summarise(
+    Media = mean(se, na.rm = TRUE),
+    Error_Std = sd(se, na.rm = TRUE),
+    n = n(),
+    Error_Estandar = Error_Std / sqrt(n),
+    .groups = 'drop'
+  ) %>%
+  mutate(combinacion = paste(cc, ed_inf, sep = ":"))
+
+# 3. Preparar letras del post hoc
+letras <- as.data.frame(HSD_Interaccion$groups)
+letras$combinacion <- rownames(letras)
+colnames(letras)[which(names(letras) == "groups")] <- "letra"
+letras <- letras[, c("combinacion", "letra")]
+
+# 4. Unir letras con resumen de medias
+medias_interaccion <- left_join(medias_interaccion, letras, by = "combinacion")
+
+# 5. Hacer gráfico de barras con letras
+dodge <- position_dodge(width = 0.7)
+
+grafico_barras <- ggplot(medias_interaccion, aes(x = cc, y = Media, fill = ed_inf)) +
+  geom_bar(stat = "identity", position = dodge, width = 0.6, color = "black") +
+  geom_errorbar(aes(ymin = Media - Error_Estandar, ymax = Media + Error_Estandar),
+                position = dodge, width = 0.2) +
+  geom_text(aes(label = letra, y = Media + Error_Estandar + 0.07),
+            position = dodge, vjust = 0, size = 3.5) +
+  labs(
+    x = "Doses (conidia/mL)", 
+    y = "Internal severity grades", 
+    fill = "Cacao pod age (days)"
+  ) +
+  theme_classic() +
+  scale_fill_manual(values = c("20" = "#a6cee3", "40" = "#b2df8a", "60" = "#fdbf6f")) +  # Colores específicos
+  theme(
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 8)
+  )
+
+# Mostrar gráfico
+print(grafico_barras)
+
+
+# 6. Mostrar gráfico
+print(grafico_barras)
+# Guardar el gráfico
+ggsave("C:/Users/USUARIO/Desktop/TESIS/TESIS SUSTENTADA/ARTICLE_LEIVA/FIGURES_ARTICLE/Figure_4b.png", 
+       grafico_barras, width = 6, height = 4.5, dpi = 300)
+
+
+```
+
+## Efficay of biocontrol
+```{r}
+# ====================================
+# 2. IMPORTACIÓN Y EXPLORACION DE DATOS
+# ====================================
+getwd() # Verificar escritorio
+
+# Importar desde archivo Excel
+DatAov2 <- read.xlsx("C:/Users/USUARIO/Documents/W1/R_HENRY/DATA_CAMPO.xlsx", sheet = "ef")
+
+# Ver estructura detallada
+str(DatAov2)
+```
+
+```{r}
+# ====================================
+# 3. PREPARACION Y AJUSTE DEL MODELO
+# ====================================
+# Convert categorical variables to factors for incidence
+DatAov2 <- DatAov2 |> 
+  mutate(ID = factor(ID),
+         cc = factor(cc),
+         ed_inf = factor(ed_inf),
+         bq = factor(bq))
+
+# Ver estructura detallada
+str(DatAov2)
+
+# Ajuste del modelo estadistico (ANOVA DE DOS VIAS)
+modeloAov2 <- aov(ef ~ cc * 
+                    ed_inf + bq, data = DatAov2)
+summary(modeloAov2)
+```
+
+```{r}
+# =======================================
+# 4. VERIFICACION DE SUPUESTOS DEL MODELO
+# =======================================
+# Verificación gráfica de supuestos
+par(modeloAov2 = c(2, 2))
+plot(modeloAov2)
+
+# Gráfico Q-Q para residuos usando car::qqPlot
+qqPlot(residuals(modeloAov2), 
+       main = "Q-Q Plot de Residuos del ANOVA", 
+       xlab = "Cuantiles teóricos", 
+       ylab = "Cuantiles observados (Residuos)",
+       col = "blue")
+
+## A) NORMALIDAD DE RESIDUOS
+# Prueba de Shapiro-Wilk para residuos
+shapiro.test(residuals(modeloAov2))
+
+# Prueba de Anderson-Darling
+ad.test(residuals(modeloAov2))
+
+# B) HOMOGENEIDAD DE VARIANZAS PARA GENOTIPO
+# Prueba de Bartlett (más sensible a no normalidad)
+bartlett.test(ef ~ cc, data = DatAov2)
+
+# B) HOMOGENEIDAD DE VARIANZAS PARA TRATAMIENTO
+# Prueba de Bartlett (más sensible a no normalidad)
+bartlett.test(ef ~ ed_inf, data = DatAov2)
+
+#Homogeneidad de varianzas
+leveneTest(ef ~ cc, data = DatAov2)
+```
+
+```{r}
+# =======================================
+# 5. PRUEBAS POST HOC COMPLETAS
+# =======================================
+# =======================================
+# 5.1 POST HOC PARA FACTOR GENOTIPO
+# =======================================
+# Prueba de Tukey HSD para Genotipo
+HSD_cc <- HSD.test(modeloAov2, "cc", group = TRUE)
+print(HSD_cc$groups)
+
+# =======================================
+# 5.2 POST HOC PARA FACTOR TRATAMIENTO
+# =======================================
+# Prueba de Tukey HSD para Tratamiento
+HSD_ed_inf <- HSD.test(modeloAov2, "ed_inf", group = TRUE)
+print(HSD_ed_inf$groups)
+
+# =======================================
+# 5.3 POST HOC PARA LA INTERACCIÓN
+# =======================================
+# Prueba de Tukey HSD para la interacción
+HSD_Interaccion <- HSD.test(modeloAov2, c("cc", "ed_inf"), group = TRUE)
+print(HSD_Interaccion$groups)
+```
+```{r}
+#=====================================================
+# código adicional para gráfico (FUNCIONAL)
+#=====================================================
+
+# 1. Hacer prueba de Tukey HSD para la interacción
+HSD_Interaccion <- HSD.test(modeloAov2, c("cc", "ed_inf"), group = TRUE)
+print(HSD_Interaccion$groups)
+
+# 2. Crear resumen de medias por combinación
+medias_interaccion <- DatAov2 %>%
+  group_by(cc, ed_inf) %>%
+  summarise(
+    Media = mean(ef, na.rm = TRUE),
+    Error_Std = sd(ef, na.rm = TRUE),
+    n = n(),
+    Error_Estandar = Error_Std / sqrt(n),
+    .groups = 'drop'
+  ) %>%
+  mutate(combinacion = paste(cc, ed_inf, sep = ":"))
+
+# 3. Preparar letras del post hoc
+letras <- as.data.frame(HSD_Interaccion$groups)
+letras$combinacion <- rownames(letras)
+colnames(letras)[which(names(letras) == "groups")] <- "letra"
+letras <- letras[, c("combinacion", "letra")]
+
+# 4. Unir letras con resumen de medias
+medias_interaccion <- left_join(medias_interaccion, letras, by = "combinacion")
+
+# 5. Hacer gráfico de barras con letras
+# Definir un solo position_dodge
+# Definir posición común
+dodge <- position_dodge(width = 0.7)
+
+grafico_barras <- ggplot(medias_interaccion, aes(x = cc, y = Media, fill = ed_inf)) +
+  geom_bar(stat = "identity", position = dodge, width = 0.6, color = "black") +
+  geom_errorbar(aes(ymin = Media - Error_Estandar, ymax = Media + Error_Estandar),
+                position = dodge, width = 0.2) +
+  geom_text(aes(label = letra, y = Media + Error_Estandar + 0.07),
+            position = dodge, vjust = -0.35, size = 3.5) +
+  labs(
+    x = "Doses (conidia/mL)", 
+    y = "Biocontrol efficacy (%)", 
+    fill = "Cacao pod age (days)"
+  ) +
+  scale_y_continuous(limits = c(0, 100)) +
+  theme_classic() +
+  scale_fill_manual(values = c("20" = "#a6cee3", "40" = "#b2df8a", "60" = "#fdbf6f")) +  # Colores específicos
+  theme(
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 8)
+  )
+
+# Mostrar gráfico
+print(grafico_barras)
+
+
+# 6. Mostrar gráfico
+print(grafico_barras)
+# Guardar el gráfico
+ggsave("C:/Users/USUARIO/Desktop/TESIS/TESIS SUSTENTADA/ARTICLE_LEIVA/FIGURES_ARTICLE/Figure_5.png", 
+       grafico_barras, width = 6, height = 4.5, dpi = 300)
+
 
 ```
